@@ -18,6 +18,11 @@ from . import config
 
 logger = logging.getLogger(__name__)
 
+# opensearch-py logs a full connection traceback at WARNING for every failed
+# attempt, even though we already handle the failure gracefully below - that
+# makes local runs (no OpenSearch started) look broken when they aren't.
+logging.getLogger("opensearch").setLevel(logging.ERROR)
+
 _client = None
 _client_checked = False
 
