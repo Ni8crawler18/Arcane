@@ -19,17 +19,58 @@ rm -rf .local_data
 make cli
 ```
 
-Pick doctor `1` (Dr. Priya Mehta). Then, in order:
+Pick doctor `1` (Dr. Priya Mehta). Every row below is ONE thing to type at
+the prompt that's currently showing - the menu and the "pick a patient"
+prompt are different prompts, don't type both numbers at the same one.
 
-| Step | Menu choice | What it shows |
-|---|---|---|
-| 1 | `1` (view my patients) | Real patients with a note history already on file |
-| 2 | `3` → pick Asha Rao | Her full note history - the "fast context before a call" pitch |
-| 3 | `5` → pick Asha Rao → search `swelling` | Search actually filters |
-| 4 | `4` → pick Vikram Nair → type a note | Note gets saved live |
-| 5 | `7` | **The guarded agent runs** - prints `[Cedar] get_patient_notes -> allowed`, then `[Cedar] send_notification(...) -> Cedar ALLOWED`, then the actual message sent |
-| 6 | `6` → any patient → `0` days | Schedules a follow-up due immediately |
-| 7 | `7` again | Fires that new one too - do this twice if you want to show it happening on demand, not just from seed data |
+**1. View my patients**
+```
+> 1
+```
+Shows both patients with a note history already on file. Enter to continue.
+
+**2. View Asha Rao's note history**
+```
+> 3
+Pick a number> 1
+```
+(`3` = menu choice "View a patient's note history"; `1` = Asha Rao in the
+list that appears next - she's always #1 for Dr. Mehta.) Shows her full
+history - the "fast context before a call" pitch. Enter to continue.
+
+**3. Search her notes**
+```
+> 5
+Pick a number> 1
+Search for: swelling
+```
+Shows only the matching notes. Enter to continue.
+
+**4. Add a note for Vikram Nair**
+```
+> 4
+Pick a number> 2
+Note for Vikram Nair: Feeling much better, stiffness gone.
+```
+Enter to continue.
+
+**5. Run the guarded agent** - the main event
+```
+> 7
+```
+No sub-prompt needed here - it processes whatever's due for this doctor.
+Prints `[Cedar] get_patient_notes -> allowed`, then
+`[Cedar] send_notification(...) -> Cedar ALLOWED`, then the actual message
+sent. Enter to continue.
+
+**6. Schedule a follow-up due right now, then fire it live**
+```
+> 6
+Pick a number> 1
+Check back on Asha Rao in how many days? (0 = right now, for a demo) 0
+```
+Enter to continue, then repeat step 5 (`> 7`) to show it firing on demand,
+not just from the seed data.
 
 **Say over step 5:**
 > "This is the Strands Agent - it reads this patient's notes, and every
