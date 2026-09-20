@@ -1,138 +1,118 @@
-# Adios — 3-minute demo script
+# Arcane — demo script
 
-Covers the three judging pillars: **useful product**, **AWS implementation**,
-**what we learned**.
+Two ways to demo, pick one:
 
-## Before recording
+- **CLI demo** (recommended, fastest, no timing risk) - `make cli`
+- **API demo** - `make run` + curl, shown live via the server logs
 
-```bash
-pkill -f scripts/local_server.py   # kill any old instance
-rm -rf .local_data                  # clean slate
-make run                            # starts fresh, seeds 3 already-due patients
-```
-
-Leave this terminal visible — the auto-reminder firing live is your best
-"wow" moment and costs you nothing to show.
-
-Keep a second terminal ready for `curl` commands.
+Both can run in **fast mode** (templated reminder, instant) or **live LLM
+mode** (`ADIOS_USE_LLM=1`, the agent's model actually drafts the message,
+takes ~30-60s per reminder on CPU with `gemma4:e2b`). If you're short on
+time, use fast mode - it's the same Cedar enforcement, just no wait.
 
 ---
 
-## 0:00–0:30 — The problem (useful product)
-
-**Say:**
-> "Doctors juggling follow-ups today rely on memory, sticky notes, or a
-> calendar reminder they set themselves. If they forget, the patient never
-> gets checked on. And when a patient does call back weeks later, the
-> doctor has to reconstruct their condition from scattered notes or memory.
-> Adios fixes both: it tracks a short note per visit, and it automatically
-> notifies the patient when a follow-up is due — no one has to remember."
-
-Show the terminal running `make run` — point out the 4 seeded patients and,
-within the first few seconds, the `[followup-watcher]` lines firing for
-Asha, Meera, and Rohan automatically. That's the core promise happening
-live, unscripted.
-
-## 0:30–1:45 — Live walkthrough (product in action)
-
-Run these in the second terminal (swap in your own printed `patient_id`):
+## Option A — CLI demo (~2 minutes)
 
 ```bash
-# 1. A doctor looks up a patient and their note history before a call
+rm -rf .local_data
+make cli
+```
+
+Pick doctor `1` (Dr. Priya Mehta). Then, in order:
+
+| Step | Menu choice | What it shows |
+|---|---|---|
+| 1 | `1` (view my patients) | Real patients with a note history already on file |
+| 2 | `3` → pick Asha Rao | Her full note history - the "fast context before a call" pitch |
+| 3 | `5` → pick Asha Rao → search `swelling` | Search actually filters |
+| 4 | `4` → pick Vikram Nair → type a note | Note gets saved live |
+| 5 | `7` | **The guarded agent runs** - prints `[Cedar] get_patient_notes -> allowed`, then `[Cedar] send_notification(...) -> Cedar ALLOWED`, then the actual message sent |
+| 6 | `6` → any patient → `0` days | Schedules a follow-up due immediately |
+| 7 | `7` again | Fires that new one too - do this twice if you want to show it happening on demand, not just from seed data |
+
+**Say over step 5:**
+> "This is the Strands Agent - it reads this patient's notes, and every
+> single tool call it makes is checked against a Cedar policy before it
+> runs. It's allowed to read notes and send one specific kind of message -
+> a follow-up reminder - and nothing else."
+
+To show the **live model** instead of the template, quit (`0`) and restart with:
+```bash
+rm -rf .local_data
+ADIOS_USE_LLM=1 make cli
+```
+Same steps, but step 5 now streams `Tool #1: get_patient_notes` /
+`Tool #2: send_notification` live as the model actually reasons - takes
+~30-60s, so only do this if you have the time and want to prove it's a real
+model, not a script.
+
+---
+
+## Option B — API demo (curl, ~2 minutes)
+
+```bash
+pkill -f scripts/local_server.py
+rm -rf .local_data
+make run
+```
+
+Copy a `patient_id` from the startup output, then in a second terminal:
+
+```bash
+# look up a patient + notes
 curl -s -H "X-Doctor-Id: dr_mehta" http://localhost:8000/patients/<patient_id> | python3 -m json.tool
 curl -s -H "X-Doctor-Id: dr_mehta" http://localhost:8000/patients/<patient_id>/notes | python3 -m json.tool
 
-# 2. Search that history instead of scrolling
+# search notes
 curl -s -H "X-Doctor-Id: dr_mehta" "http://localhost:8000/patients/<patient_id>/notes?q=swelling" | python3 -m json.tool
 
-# 3. Add a note after today's consultation
+# add a note
 curl -s -X POST -H "X-Doctor-Id: dr_mehta" -H "Content-Type: application/json" \
-  -d '{"text":"Follow-up call: patient doing well, no further action needed."}' \
+  -d '{"text":"Follow-up call: doing well."}' \
   http://localhost:8000/patients/<patient_id>/notes | python3 -m json.tool
 
-# 4. Schedule the NEXT follow-up
-curl -s -X POST -H "X-Doctor-Id: dr_mehta" -H "Content-Type: application/json" \
-  -d '{"durationDays":7}' \
-  http://localhost:8000/patients/<patient_id>/followups | python3 -m json.tool
-
-# 5. Access control isn't decorative - a different doctor is denied
+# a different doctor is denied - Cedar, not an if-check
 curl -s -H "X-Doctor-Id: dr_khan" http://localhost:8000/patients/<patient_id> -w "\nHTTP:%{http_code}\n"
 ```
 
-**Say while #5 runs:**
-> "Patient notes are sensitive - Dr. Khan isn't Asha's doctor, so he's
-> denied. That's not an if-check I wrote by hand in this one endpoint - it's
-> a policy, enforced everywhere, automatically."
-
-## 1:45–2:20 — The AWS stack (show the actual code, not a table)
-
-Have these three files already open in editor tabs before you start recording,
-so you just switch tabs on camera instead of navigating live.
-
-**Tab 1 — `infra/template.yaml`** (scroll to show, ~8s)
-- Lines 23, 35, 51: three `AWS::DynamoDB::Table` resources (patients, notes, follow-ups)
-- Lines 63-124: `AWS::Serverless::Function` blocks - real Lambda handlers behind API Gateway
-- Line 132: `AWS::Serverless::StateMachine` - the Step Functions definition
-
-> "This is a real SAM template - DynamoDB tables, Lambda functions behind API
-> Gateway, and a Step Functions state machine. It deploys to LocalStack today
-> and to real AWS with the same file tomorrow."
-
-**Tab 2 — `src/adios/auth/policies.cedar`** (whole file is 42 lines, show it all, ~10s)
-
-> "This one file is the entire access-control system. `resource.doctor ==
-> principal` - a doctor can only touch their own patients. Cedar evaluates
-> this on every request."
-
-**Tab 3 — `src/adios/agent/followup_agent.py`, lines 17-33** (~10s)
-
-```python
-from strands.models.ollama import OllamaModel
-from strands.vended_interventions.cedar import CedarAuthorization
-...
-def build_agent() -> Agent:
-    cedar = CedarAuthorization(policies=_POLICIES, principal={"type": "Agent", "id": "followup_bot"})
-    model = OllamaModel(host=OLLAMA_HOST, model_id=OLLAMA_MODEL_ID)
-    return Agent(
-        ...
-        tools=[tools.get_patient_notes, tools.send_notification],
-```
-
-> "The reminder agent is built on the Strands Agents SDK, and it's wired to
-> the exact same Cedar policy file you just saw. Every tool call it makes -
-> reading notes, sending a message - is checked against that policy before
-> it runs. We built this entirely on the Build It track: LocalStack instead
-> of DynamoDB and Step Functions, SAM CLI instead of deployed Lambda, Ollama
-> instead of Bedrock, OpenSearch and Cedar running locally. Same code either
-> way - only the endpoint changes for a real AWS deployment."
-
-## 2:20–3:00 — What we learned
-
-**Say (pick 2-3, don't rush all of them):**
-> - "We learned that AI agents shouldn't be trusted by prompt alone - Cedar
->   lets us enforce, as policy, exactly what our reminder agent is allowed
->   to do, independent of what the model decides to try."
-> - "Step Functions' Wait state turned out to be the right primitive for
->   'come back to this in N days' - we didn't need to build or run our own
->   scheduler."
-> - "Designing every layer (DynamoDB, OpenSearch) with a local fallback
->   meant our demo never broke, even when infra wasn't running - which
->   mattered a lot given how little time we had."
-> - "The Build It -> Ship It path is real, not just marketing: the same
->   handler code, same Cedar policy, same agent - only the endpoint changes
->   when we're ready to deploy for real."
-
-**Close:**
-> "This is our MVP - notes, follow-ups, automatic reminders, and access
-> control that's actually enforced. Next we'd add real doctor sign-in, a
-> proper UI, and a patient-facing reply channel."
+Point at the terminal running `make run` - within 5s of startup you'll see
+`[followup-watcher]` lines fire automatically for the seeded due patients.
+That's the Cedar-guarded agent running unprompted. For the live-model
+version: `ADIOS_USE_LLM=1 make run` instead (the startup banner confirms
+which mode is active).
 
 ---
 
+## Show the code (30s, no table needed)
+
+Open these three files as tabs beforehand:
+
+1. **`infra/template.yaml`** - DynamoDB tables, Lambda functions, the Step
+   Functions state machine (line 132) - a real SAM template.
+2. **`src/adios/auth/policies.cedar`** - the whole 42-line access-control
+   policy, in one file.
+3. **`src/adios/agent/followup_agent.py` (lines 17-33)** - `CedarAuthorization`
+   + `OllamaModel` wiring the agent to that same policy file.
+
+> "Built entirely on the Build It track - LocalStack instead of DynamoDB and
+> Step Functions, SAM CLI instead of deployed Lambda, Ollama instead of
+> Bedrock. Same code, same Cedar policy, same agent - only the endpoint
+> changes for real AWS."
+
+## What we learned (pick 2, don't rush)
+
+- AI agents shouldn't be trusted by prompt alone - Cedar enforces what ours
+  can do as policy, independent of what the model decides to try.
+- Step Functions' `Wait` state is the right primitive for "come back to this
+  in N days" - no scheduler to build or run.
+- Every layer having a local fallback meant the demo never broke, even with
+  no infra running.
+
 ## If something breaks mid-recording
 
-- Server not responding: it's still running in the background from before -
-  check the terminal, or `make run` again (safe, re-seeds fresh data).
-- Wrong patient ID: re-read them from the top of the `make run` output.
-- Watcher hasn't fired yet: it checks every 5s - just wait a beat before
-  cutting to that part in editing.
+- `ModuleNotFoundError`: `pip install -r requirements.txt`.
+- OpenSearch/DynamoDB warnings in the log: expected, harmless, it's using
+  the local fallback - not a failure.
+- Live LLM mode seems stuck: it takes 30-60s, that's normal on CPU - use
+  fast mode if you're out of time.

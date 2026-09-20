@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from adios import repository  # noqa: E402
+from adios import config, repository  # noqa: E402
 from adios.handlers import followups, notes, notify, patients  # noqa: E402
 
 import logging  # noqa: E402
@@ -117,6 +117,13 @@ def main() -> None:
     )
 
     threading.Thread(target=_followup_watcher, daemon=True).start()
+
+    if config.USE_LLM_AGENT:
+        print("\nLive LLM mode: ON - the follow-up agent drafts with a real local model "
+              "(slower, ~30-60s per reminder on CPU).")
+    else:
+        print("\nLive LLM mode: OFF - drafting with a fixed template (fast). "
+              "Set ADIOS_USE_LLM=1 to use a real local model instead.")
 
     print(f"\nServer running at http://localhost:{PORT} - Ctrl+C to stop.")
     print(f"(follow-ups already due, like {rows[0]['name']}'s, will be notified within {FOLLOWUP_CHECK_INTERVAL_SECONDS}s)\n")
