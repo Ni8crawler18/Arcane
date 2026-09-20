@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Adios - patient follow-up care platform (Build It track: deploy this to
+  LocalStack with `samlocal deploy`, see infra/README.md).
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256
+    CodeUri: ../src
+    Environment:
+      Variables:
+        AWS_ENDPOINT_URL: http://host.docker.internal:4566
+        PATIENTS_TABLE: !Ref PatientsTable
+        NOTES_TABLE: !Ref NotesTable
+        FOLLOWUPS_TABLE: !Ref FollowupsTable
+        FOLLOWUP_STATE_MACHINE_ARN: !Ref FollowupStateMachine
+
+Resources:
+  PatientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: adios-patients
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: patientId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+
+  NotesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: adios-notes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: patientId
+          AttributeType: S
+        - AttributeName: noteId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: patientId
+          KeyType: HASH
+        - AttributeName: noteId
+          KeyType: RANGE
+
+  FollowupsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: adios-followups
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: followupId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: followupId
+          KeyType: HASH
+
+  CreatePatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.patients.create
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref PatientsTable }
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /patients, Method: post }
+
+  GetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.patients.get
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref PatientsTable }
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /patients/{patientId}, Method: get }
+
+  AddNoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.notes.add
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref NotesTable }
+        - DynamoDBReadPolicy: { TableName: !Ref PatientsTable }
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /patients/{patientId}/notes, Method: post }
+
+  ListNotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.notes.list_
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref NotesTable }
+        - DynamoDBReadPolicy: { TableName: !Ref PatientsTable }
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /patients/{patientId}/notes, Method: get }
+
+  ScheduleFollowupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.followups.schedule
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref FollowupsTable }
+        - DynamoDBReadPolicy: { TableName: !Ref PatientsTable }
+        - StepFunctionsExecutionPolicy: { StateMachineName: !GetAtt FollowupStateMachine.Name }
+      Events:
+        Api:
+          Type: Api
+          Properties: { Path: /patients/{patientId}/followups, Method: post }
+
+  NotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: adios.handlers.notify.handle
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref FollowupsTable }
+        - DynamoDBReadPolicy: { TableName: !Ref NotesTable }
+        - DynamoDBReadPolicy: { TableName: !Ref PatientsTable }
+
+  FollowupStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: adios-followup-flow
+      DefinitionUri: statemachine/followup_flow.asl.json
+      DefinitionSubstitutions:
+        NotifyFunctionArn: !GetAtt NotifyFunction.Arn
+      Policies:
+        - LambdaInvokePolicy: { FunctionName: !Ref NotifyFunction }
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the patients API (LocalStack)
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+  FollowupStateMachineArn:
+    Value: !Ref FollowupStateMachine

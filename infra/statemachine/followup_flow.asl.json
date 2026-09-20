@@ -1,0 +1,16 @@
+{
+  "Comment": "Wait for a follow-up's duration to elapse, then send the patient a reminder drafted by the guarded follow-up agent.",
+  "StartAt": "WaitForFollowupDuration",
+  "States": {
+    "WaitForFollowupDuration": {
+      "Type": "Wait",
+      "SecondsPath": "$.waitSeconds",
+      "Next": "SendReminder"
+    },
+    "SendReminder": {
+      "Type": "Task",
+      "Resource": "${NotifyFunctionArn}",
+      "End": true
+    }
+  }
+}

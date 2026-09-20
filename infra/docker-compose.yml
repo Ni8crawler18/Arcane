@@ -1,0 +1,24 @@
+# Build It track local infra: LocalStack (DynamoDB, Step Functions, Lambda,
+# API Gateway) + OpenSearch (note search). Works with either Finch or Docker:
+#   finch compose -f infra/docker-compose.yml up -d
+#   docker compose -f infra/docker-compose.yml up -d
+services:
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,stepfunctions,lambda,apigateway,sns,iam,sts,cloudformation
+      - DEBUG=0
+      - LAMBDA_EXECUTOR=docker
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
