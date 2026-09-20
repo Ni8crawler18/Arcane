@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.ERROR)  # keep the screen clean for a demo
 
 from adios import repository  # noqa: E402
 from adios.auth.authorize import authorize  # noqa: E402
+from adios.handlers import notify  # noqa: E402
 from seed_demo_data import DOCTORS, seed  # noqa: E402
 
 DOCTOR_IDS = list(DOCTORS.keys())
@@ -57,6 +58,16 @@ def pick_patient(doctor_id: str):
         return None
 
 
+def _check(doctor_id: str, action: str, patient) -> bool:
+    """Run the real Cedar check and print the decision, instead of hiding it."""
+    decision = authorize(doctor_id, action, patient.patient_id, owning_doctor_id=patient.doctor_id)
+    if decision.allowed:
+        print(f"[Cedar] {action} -> ALLOWED ({doctor_id} owns this patient)")
+    else:
+        print(f"[Cedar] {action} -> DENIED ({decision.reason})")
+    return decision.allowed
+
+
 def view_patients(doctor_id: str) -> None:
     patients = repository.list_patients_for_doctor(doctor_id)
     if not patients:
@@ -86,9 +97,7 @@ def view_notes(doctor_id: str) -> None:
     patient = pick_patient(doctor_id)
     if not patient:
         return
-    decision = authorize(doctor_id, "view_notes", patient.patient_id, owning_doctor_id=patient.doctor_id)
-    if not decision.allowed:
-        print(f"Denied: {decision.reason}")
+    if not _check(doctor_id, "view_notes", patient):
         return
     notes = repository.list_notes(patient.patient_id)
     print(f"\n{patient.name}'s history ({len(notes)} note(s)):\n")
@@ -100,9 +109,7 @@ def add_note(doctor_id: str) -> None:
     patient = pick_patient(doctor_id)
     if not patient:
         return
-    decision = authorize(doctor_id, "add_note", patient.patient_id, owning_doctor_id=patient.doctor_id)
-    if not decision.allowed:
-        print(f"Denied: {decision.reason}")
+    if not _check(doctor_id, "add_note", patient):
         return
     text = input(f"Note for {patient.name}: ").strip()
     if not text:
@@ -116,9 +123,7 @@ def search_notes(doctor_id: str) -> None:
     patient = pick_patient(doctor_id)
     if not patient:
         return
-    decision = authorize(doctor_id, "search_notes", patient.patient_id, owning_doctor_id=patient.doctor_id)
-    if not decision.allowed:
-        print(f"Denied: {decision.reason}")
+    if not _check(doctor_id, "search_notes", patient):
         return
     query = input("Search for: ").strip()
     hits = repository.search_notes(patient.patient_id, query)
@@ -134,11 +139,9 @@ def schedule_followup(doctor_id: str) -> None:
     patient = pick_patient(doctor_id)
     if not patient:
         return
-    decision = authorize(doctor_id, "schedule_followup", patient.patient_id, owning_doctor_id=patient.doctor_id)
-    if not decision.allowed:
-        print(f"Denied: {decision.reason}")
+    if not _check(doctor_id, "schedule_followup", patient):
         return
-    days = input(f"Check back on {patient.name} in how many days? ").strip()
+    days = input(f"Check back on {patient.name} in how many days? (0 = right now, for a demo) ").strip()
     try:
         days = int(days)
     except ValueError:
@@ -146,6 +149,28 @@ def schedule_followup(doctor_id: str) -> None:
         return
     followup = repository.schedule_followup(patient.patient_id, doctor_id, duration_days=days)
     print(f"Done - {patient.name} will be notified automatically on {followup.scheduled_for[:10]}.")
+    if days <= 0:
+        print("It's already due - use option 7 to see the guarded agent send it now.")
+
+
+def process_due_followups(doctor_id: str) -> None:
+    """The one place the Strands Agents SDK + Cedar actually run in this CLI.
+
+    Everywhere else, Cedar checks a *doctor's* access. Here, Cedar checks
+    what the *agent itself* is allowed to do - it can read notes and send a
+    followup_reminder, and nothing else (see auth/policies.cedar).
+    """
+    due = [f for f in repository.list_due_followups() if f.doctor_id == doctor_id]
+    if not due:
+        print("No follow-ups due right now for your patients.")
+        print("(schedule one with 0 days from option 6 to see this fire immediately)")
+        return
+    for f in due:
+        patient = repository.get_patient(f.patient_id)
+        print(f"\nFollow-up due for {patient.name}.")
+        print("Handing off to the Strands Agent - every tool call it makes below is Cedar-checked:\n")
+        result = notify.handle({"followupId": f.followup_id, "patientId": f.patient_id})
+        print(result["result"])
 
 
 MENU = """
@@ -156,7 +181,8 @@ MENU = """
  4. Add a note after a consultation
  5. Search a patient's notes
  6. Schedule a follow-up
- 7. Switch doctor
+ 7. Check for due follow-ups now (Strands Agent + Cedar)
+ 8. Switch doctor
  0. Quit
 --------------------------------------------------"""
 
@@ -174,6 +200,7 @@ def main() -> None:
         "4": add_note,
         "5": search_notes,
         "6": schedule_followup,
+        "7": process_due_followups,
     }
 
     while True:
@@ -183,7 +210,7 @@ def main() -> None:
         if choice == "0":
             print("Bye.")
             return
-        if choice == "7":
+        if choice == "8":
             doctor_id = choose_doctor()
             continue
         action = actions.get(choice)

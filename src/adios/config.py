@@ -23,3 +23,9 @@ FOLLOWUP_STATE_MACHINE_ARN = os.environ.get("FOLLOWUP_STATE_MACHINE_ARN", "")
 # Local fallback paths used when LocalStack/OpenSearch aren't running yet, so
 # the CLI demo always works even before `finch compose up` / `samlocal deploy`.
 LOCAL_DATA_DIR = os.environ.get("ADIOS_LOCAL_DATA_DIR", ".local_data")
+
+# Off by default: the follow-up agent drafts with a fixed template, so the
+# demo works with no Ollama server running. Set ADIOS_USE_LLM=1 (with
+# `ollama serve` + a tool-capable model pulled) to let the agent's model
+# actually read the notes and draft the message itself.
+USE_LLM_AGENT = os.environ.get("ADIOS_USE_LLM", "0") == "1"

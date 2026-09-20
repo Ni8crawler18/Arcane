@@ -39,6 +39,14 @@ make cli
 search a patient's history, schedule a follow-up - no curl or JSON needed.
 It's the fastest way to see how this actually feels to use day to day.
 
+Option 7 in that menu ("Check for due follow-ups now") is where the Strands
+Agent and Cedar actually run - it reads the patient's notes, drafts the
+reminder, and every tool call it makes is checked against the same Cedar
+policy file that guards doctor access. By default it drafts with a fixed
+template so this works with no extra setup. To have the agent's own local
+model draft the message instead: `ollama serve`, pull any tool-calling model
+(the repo defaults to `gemma4:e2b`), then run with `ADIOS_USE_LLM=1 make cli`.
+
 The rest of this section uses the HTTP API instead (`make run`), which is
 useful if you want to see the actual request/response shape, or wire this up
 to something else.

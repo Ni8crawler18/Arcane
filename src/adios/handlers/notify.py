@@ -6,7 +6,7 @@ Not an API Gateway route - this is a plain Lambda task target
 
 from __future__ import annotations
 
-from .. import repository
+from .. import config, repository
 from ..agent.followup_agent import draft_and_send
 
 
@@ -14,7 +14,7 @@ def handle(event: dict, context=None) -> dict:
     followup_id = event["followupId"]
     patient_id = event["patientId"]
 
-    result = draft_and_send(patient_id, use_llm=False)
+    result = draft_and_send(patient_id, use_llm=config.USE_LLM_AGENT)
     repository.update_followup_status(followup_id, "notified")
 
     return {"followupId": followup_id, "patientId": patient_id, "result": result}
