@@ -14,6 +14,10 @@ demo:
 run:
 	python3 scripts/local_server.py
 
+# Menu-driven CLI a doctor can actually use - no curl, no JSON.
+cli:
+	python3 scripts/doctor_cli.py
+
 # Build It track local infra (LocalStack + OpenSearch). Use `finch compose`
 # if you don't have Docker; `docker compose` works identically.
 infra-up:

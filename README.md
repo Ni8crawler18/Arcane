@@ -32,6 +32,18 @@ trying requests).
 git clone <this-repo-url>
 cd Arcane
 pip install -r requirements.txt
+make cli
+```
+
+`make cli` opens a simple numbered menu - view your patients, add a note,
+search a patient's history, schedule a follow-up - no curl or JSON needed.
+It's the fastest way to see how this actually feels to use day to day.
+
+The rest of this section uses the HTTP API instead (`make run`), which is
+useful if you want to see the actual request/response shape, or wire this up
+to something else.
+
+```bash
 make run
 ```
 
