@@ -7,6 +7,8 @@ is due, so nothing gets missed because someone forgot to check a calendar.
 Built for the AWS + WeMakeDevs "First Commit" hackathon (Build It track —
 runs entirely on your own machine, no AWS account or credit card needed).
 
+![Arcane architecture](docs/article/cover_architecture.png)
+
 ## What you get
 
 - **A record per patient** with your short notes from every visit, so on a
@@ -93,6 +95,8 @@ own doctor.
 
 Run the automated test suite any time with `make test`.
 
+![A day in the life of a follow-up](docs/article/doctor_workflow.png)
+
 ## The AWS stack
 
 Everything below runs locally through AWS's own open-source tooling (Build
@@ -109,6 +113,8 @@ at a real endpoint instead of localhost, no rewrite needed.
 | Drafting the personalized reminder message  | Bedrock               | Strands Agents SDK + Ollama (local LLM)|
 | Container runtime for the above             | —                     | Finch                                  |
 
+![Build It to Ship It](docs/article/build_it_vs_ship_it.png)
+
 `make run` (what you just used above) skips all of this infrastructure and
 runs against local, in-memory/file-based fallbacks instead — that's what
 makes the 2-minute quick start possible. To run against the real local AWS
@@ -122,6 +128,8 @@ make deploy       # deploys infra/template.yaml to LocalStack
 ```
 
 ## Why access control isn't an afterthought here
+
+![The Cedar guardrail](docs/article/cedar_guardrail.png)
 
 Patient notes are sensitive. The rule — *a doctor may only see patients they
 actually treat* — is enforced by a real policy engine (Cedar), defined once
