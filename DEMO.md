@@ -1,18 +1,4 @@
-# Arcane — demo script
-
-Two ways to demo, pick one:
-
-- **CLI demo** (recommended, fastest, no timing risk) - `make cli`
-- **API demo** - `make run` + curl, shown live via the server logs
-
-Both can run in **fast mode** (templated reminder, instant) or **live LLM
-mode** (`ADIOS_USE_LLM=1`, the agent's model actually drafts the message,
-takes ~30-60s per reminder on CPU with `gemma4:e2b`). If you're short on
-time, use fast mode - it's the same Cedar enforcement, just no wait.
-
----
-
-## Option A — CLI demo (~2 minutes)
+# Arcane — walkthrough script
 
 ```bash
 rm -rf .local_data
@@ -20,8 +6,11 @@ make cli
 ```
 
 Pick doctor `1` (Dr. Priya Mehta). Every row below is ONE thing to type at
-the prompt that's currently showing - the menu and the "pick a patient"
-prompt are different prompts, don't type both numbers at the same one.
+the prompt currently showing - the menu and the "pick a patient" prompt are
+different prompts, don't type both numbers at the same one.
+
+The startup listing prints every patient's ID across BOTH doctors - copy one
+before you start, you'll need a Dr. Khan patient_id for step 6.
 
 **1. View my patients**
 ```
@@ -34,9 +23,8 @@ Shows both patients with a note history already on file. Enter to continue.
 > 3
 Pick a number> 1
 ```
-(`3` = menu choice "View a patient's note history"; `1` = Asha Rao in the
-list that appears next - she's always #1 for Dr. Mehta.) Shows her full
-history - the "fast context before a call" pitch. Enter to continue.
+(`3` = "View a patient's note history"; `1` = Asha Rao - she's always #1 for
+Dr. Mehta.) Enter to continue.
 
 **3. Search her notes**
 ```
@@ -44,7 +32,7 @@ history - the "fast context before a call" pitch. Enter to continue.
 Pick a number> 1
 Search for: swelling
 ```
-Shows only the matching notes. Enter to continue.
+Enter to continue.
 
 **4. Add a note for Vikram Nair**
 ```
@@ -54,86 +42,61 @@ Note for Vikram Nair: Feeling much better, stiffness gone.
 ```
 Enter to continue.
 
-**5. Run the guarded agent** - the main event
+**5. Run the guarded agent** - real local model, takes ~30-60s on CPU
 ```
 > 7
 ```
-No sub-prompt needed here - it processes whatever's due for this doctor.
-Prints `[Cedar] get_patient_notes -> allowed`, then
-`[Cedar] send_notification(...) -> Cedar ALLOWED`, then the actual message
-sent. Enter to continue.
+No sub-prompt - it processes whatever's due for this doctor. Streams
+`Tool #1: get_patient_notes`, `Tool #2: send_notification` as the model
+actually reasons, then prints the sent message. **Don't rush this one on
+camera - let it finish, the wait itself shows it's a real model, not a
+script.** If it errors instead (Ollama not running / model not pulled), it
+prints exactly why and the follow-up stays pending - fix it and press `7`
+again, nothing is lost.
 
-**6. Schedule a follow-up due right now, then fire it live**
+**Say while it's running:**
+> "This is the Strands Agent, backed by a real local model. Every tool call
+> it makes is checked against a Cedar policy before it runs - it's allowed
+> to read this patient's notes and send one specific kind of message, and
+> nothing else."
+
+**6. Show Cedar actually deny something - not staged, a real check**
+```
+> 8
+Patient ID: <paste a Dr. Khan patient_id from the startup listing>
+```
+Prints `[Cedar] view_patient -> DENIED (...)`. Then do it again with one of
+your own patient IDs to show the same check allowing it:
+```
+> 8
+Patient ID: <one of Dr. Mehta's own patient IDs>
+```
+Prints `ALLOWED` and the patient's info.
+
+**Say:**
+> "Same code path either way - Cedar decided, I didn't hardcode a doctor
+> check into this one screen."
+
+**7. Schedule a follow-up due right now, then fire it live**
 ```
 > 6
 Pick a number> 1
-Check back on Asha Rao in how many days? (0 = right now, for a demo) 0
+Check back on Asha Rao in how many days? (0 = today) 0
 ```
-Enter to continue, then repeat step 5 (`> 7`) to show it firing on demand,
-not just from the seed data.
-
-**Say over step 5:**
-> "This is the Strands Agent - it reads this patient's notes, and every
-> single tool call it makes is checked against a Cedar policy before it
-> runs. It's allowed to read notes and send one specific kind of message -
-> a follow-up reminder - and nothing else."
-
-To show the **live model** instead of the template, quit (`0`) and restart with:
-```bash
-rm -rf .local_data
-ADIOS_USE_LLM=1 make cli
-```
-Same steps, but step 5 now streams `Tool #1: get_patient_notes` /
-`Tool #2: send_notification` live as the model actually reasons - takes
-~30-60s, so only do this if you have the time and want to prove it's a real
-model, not a script.
+Enter to continue, then repeat step 5 (`> 7`) to show a reminder firing on
+demand, not just from the pre-loaded data.
 
 ---
 
-## Option B — API demo (curl, ~2 minutes)
+## Show the code (30s)
 
-```bash
-pkill -f scripts/local_server.py
-rm -rf .local_data
-make run
-```
-
-Copy a `patient_id` from the startup output, then in a second terminal:
-
-```bash
-# look up a patient + notes
-curl -s -H "X-Doctor-Id: dr_mehta" http://localhost:8000/patients/<patient_id> | python3 -m json.tool
-curl -s -H "X-Doctor-Id: dr_mehta" http://localhost:8000/patients/<patient_id>/notes | python3 -m json.tool
-
-# search notes
-curl -s -H "X-Doctor-Id: dr_mehta" "http://localhost:8000/patients/<patient_id>/notes?q=swelling" | python3 -m json.tool
-
-# add a note
-curl -s -X POST -H "X-Doctor-Id: dr_mehta" -H "Content-Type: application/json" \
-  -d '{"text":"Follow-up call: doing well."}' \
-  http://localhost:8000/patients/<patient_id>/notes | python3 -m json.tool
-
-# a different doctor is denied - Cedar, not an if-check
-curl -s -H "X-Doctor-Id: dr_khan" http://localhost:8000/patients/<patient_id> -w "\nHTTP:%{http_code}\n"
-```
-
-Point at the terminal running `make run` - within 5s of startup you'll see
-`[followup-watcher]` lines fire automatically for the seeded due patients.
-That's the Cedar-guarded agent running unprompted. For the live-model
-version: `ADIOS_USE_LLM=1 make run` instead (the startup banner confirms
-which mode is active).
-
----
-
-## Show the code (30s, no table needed)
-
-Open these three files as tabs beforehand:
+Open these three as tabs beforehand:
 
 1. **`infra/template.yaml`** - DynamoDB tables, Lambda functions, the Step
    Functions state machine (line 132) - a real SAM template.
 2. **`src/adios/auth/policies.cedar`** - the whole 42-line access-control
    policy, in one file.
-3. **`src/adios/agent/followup_agent.py` (lines 17-33)** - `CedarAuthorization`
+3. **`src/adios/agent/followup_agent.py` (`build_agent`)** - `CedarAuthorization`
    + `OllamaModel` wiring the agent to that same policy file.
 
 > "Built entirely on the Build It track - LocalStack instead of DynamoDB and
@@ -147,13 +110,16 @@ Open these three files as tabs beforehand:
   can do as policy, independent of what the model decides to try.
 - Step Functions' `Wait` state is the right primitive for "come back to this
   in N days" - no scheduler to build or run.
-- Every layer having a local fallback meant the demo never broke, even with
-  no infra running.
+- Every layer having a local fallback meant nothing broke while building,
+  even with no infra running.
 
 ## If something breaks mid-recording
 
 - `ModuleNotFoundError`: `pip install -r requirements.txt`.
 - OpenSearch/DynamoDB warnings in the log: expected, harmless, it's using
   the local fallback - not a failure.
-- Live LLM mode seems stuck: it takes 30-60s, that's normal on CPU - use
-  fast mode if you're out of time.
+- Option 7 errors "Can't run the agent right now": `ollama serve` isn't
+  running, or the model isn't pulled (`ollama pull gemma4:e2b`). Fix it,
+  press `7` again - the follow-up is still pending, nothing to redo.
+- Option 7 seems to hang: it's not hanging, it's thinking - 30-60s is
+  normal on CPU. It will error out on its own if something's actually wrong.
