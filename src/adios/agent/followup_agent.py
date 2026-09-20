@@ -10,7 +10,9 @@ anything except read notes and send a "followup_reminder"-kind message.
 
 from __future__ import annotations
 
+import json
 import os
+import urllib.request
 from pathlib import Path
 
 from strands import Agent
@@ -26,10 +28,34 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 # support - swap via OLLAMA_MODEL_ID for any other tool-capable local model.
 OLLAMA_MODEL_ID = os.environ.get("OLLAMA_MODEL_ID", "gemma4:e2b")
 
+# Bounds a stuck/slow local model call so a failure is retryable within
+# seconds instead of hanging the caller indefinitely.
+OLLAMA_TIMEOUT_SECONDS = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "120"))
+
+
+def check_ollama_ready() -> tuple[bool, str]:
+    """Fail fast with a clear reason instead of a long hang or a stack trace."""
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=3) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Can't reach Ollama at {OLLAMA_HOST} ({exc}). Run `ollama serve`."
+
+    names = [m.get("name", "") for m in data.get("models", [])]
+    wanted = OLLAMA_MODEL_ID.split(":")[0]
+    if any(n == OLLAMA_MODEL_ID or n.split(":")[0] == wanted for n in names):
+        return True, ""
+    pulled = ", ".join(names) or "(none)"
+    return False, f'Model "{OLLAMA_MODEL_ID}" not pulled. Pulled models: {pulled}. Run `ollama pull {OLLAMA_MODEL_ID}`.'
+
 
 def build_agent() -> Agent:
     cedar = CedarAuthorization(policies=_POLICIES, principal={"type": "Agent", "id": "followup_bot"})
-    model = OllamaModel(host=OLLAMA_HOST, model_id=OLLAMA_MODEL_ID)
+    model = OllamaModel(
+        host=OLLAMA_HOST,
+        model_id=OLLAMA_MODEL_ID,
+        ollama_client_args={"timeout": OLLAMA_TIMEOUT_SECONDS},
+    )
     return Agent(
         model=model,
         tools=[tools.get_patient_notes, tools.send_notification],

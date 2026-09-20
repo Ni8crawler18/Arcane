@@ -16,9 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import logging  # noqa: E402
 
-logging.basicConfig(level=logging.ERROR)  # keep the screen clean for a demo
+logging.basicConfig(level=logging.ERROR)  # keep the screen clean
 
 from adios import repository  # noqa: E402
+from adios.agent import followup_agent  # noqa: E402
 from adios.auth.authorize import authorize  # noqa: E402
 from adios.handlers import notify  # noqa: E402
 from seed_demo_data import DOCTORS, seed  # noqa: E402
@@ -141,7 +142,7 @@ def schedule_followup(doctor_id: str) -> None:
         return
     if not _check(doctor_id, "schedule_followup", patient):
         return
-    days = input(f"Check back on {patient.name} in how many days? (0 = right now, for a demo) ").strip()
+    days = input(f"Check back on {patient.name} in how many days? (0 = today) ").strip()
     try:
         days = int(days)
     except ValueError:
@@ -158,19 +159,54 @@ def process_due_followups(doctor_id: str) -> None:
 
     Everywhere else, Cedar checks a *doctor's* access. Here, Cedar checks
     what the *agent itself* is allowed to do - it can read notes and send a
-    followup_reminder, and nothing else (see auth/policies.cedar).
+    followup_reminder, and nothing else (see auth/policies.cedar). This
+    always uses the real local model - if it fails or times out, nothing is
+    marked as sent, so choosing this option again just retries cleanly.
     """
     due = [f for f in repository.list_due_followups() if f.doctor_id == doctor_id]
     if not due:
         print("No follow-ups due right now for your patients.")
         print("(schedule one with 0 days from option 6 to see this fire immediately)")
         return
+
+    ready, why_not = followup_agent.check_ollama_ready()
+    if not ready:
+        print(f"Can't run the agent right now: {why_not}")
+        print("Fix that and choose this option again - these follow-ups are still pending.")
+        return
+
     for f in due:
         patient = repository.get_patient(f.patient_id)
         print(f"\nFollow-up due for {patient.name}.")
         print("Handing off to the Strands Agent - every tool call it makes below is Cedar-checked:\n")
-        result = notify.handle({"followupId": f.followup_id, "patientId": f.patient_id})
+        try:
+            result = notify.handle({"followupId": f.followup_id, "patientId": f.patient_id, "use_llm": True})
+        except Exception as exc:  # noqa: BLE001
+            print(f"\nAgent run failed: {exc}")
+            print(f"{patient.name}'s follow-up is still pending - choose this option again to retry.")
+            continue
         print(result["result"])
+
+
+def lookup_patient(doctor_id: str) -> None:
+    """Look up any patient by ID - not just your own.
+
+    A real reason this exists: someone hands you a patient_id (a referral, a
+    covering colleague) and you look it up. Cedar decides whether you're
+    actually allowed to see them - try a patient_id printed for a different
+    doctor at startup and it will be denied.
+    """
+    patient_id = input("Patient ID: ").strip()
+    patient = repository.get_patient(patient_id)
+    if not patient:
+        print("No such patient.")
+        return
+    decision = authorize(doctor_id, "view_patient", patient.patient_id, owning_doctor_id=patient.doctor_id)
+    if not decision.allowed:
+        print(f"[Cedar] view_patient -> DENIED ({decision.reason})")
+        return
+    print(f"[Cedar] view_patient -> ALLOWED ({doctor_id} owns this patient)")
+    print(f"{patient.name}  ({patient.contact})")
 
 
 MENU = """
@@ -182,14 +218,16 @@ MENU = """
  5. Search a patient's notes
  6. Schedule a follow-up
  7. Check for due follow-ups now (Strands Agent + Cedar)
- 8. Switch doctor
+ 8. Look up a patient by ID (any doctor's)
+ 9. Switch doctor
  0. Quit
 --------------------------------------------------"""
 
 
 def main() -> None:
-    print("Seeding sample patients so there's something to work with...")
-    seed()
+    print("Loading patients...\n")
+    for r in seed():
+        print(f"  {r['name']:<12} patient_id={r['patient_id']}  ({r['doctor']})")
 
     doctor_id = choose_doctor()
 
@@ -201,6 +239,7 @@ def main() -> None:
         "5": search_notes,
         "6": schedule_followup,
         "7": process_due_followups,
+        "8": lookup_patient,
     }
 
     while True:
@@ -210,7 +249,7 @@ def main() -> None:
         if choice == "0":
             print("Bye.")
             return
-        if choice == "8":
+        if choice == "9":
             doctor_id = choose_doctor()
             continue
         action = actions.get(choice)

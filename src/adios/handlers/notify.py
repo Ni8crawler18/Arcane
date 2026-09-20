@@ -13,8 +13,9 @@ from ..agent.followup_agent import draft_and_send
 def handle(event: dict, context=None) -> dict:
     followup_id = event["followupId"]
     patient_id = event["patientId"]
+    use_llm = event.get("use_llm", config.USE_LLM_AGENT)
 
-    result = draft_and_send(patient_id, use_llm=config.USE_LLM_AGENT)
+    result = draft_and_send(patient_id, use_llm=use_llm)
     repository.update_followup_status(followup_id, "notified")
 
     return {"followupId": followup_id, "patientId": patient_id, "result": result}

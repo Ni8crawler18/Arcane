@@ -102,7 +102,7 @@ def main() -> None:
 
     from seed_demo_data import seed  # local import: only needed for the standalone server
 
-    print("Seeding realistic demo data...\n")
+    print("Loading patients...\n")
     rows = seed()
     for r in rows:
         print(f"  {r['name']:<12} patient_id={r['patient_id']}  ({r['doctor']}, follow-up {r['followup_status']})")
