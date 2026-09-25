@@ -1,0 +1,40 @@
+OncoFollow — Healthathon Submission Answers
+(https://healthathon.reskilll.com/)
+
+================================================================
+FIELD: The problem you are solving
+(max 150 words / 1200 characters)
+================================================================
+
+Cancer care does not end at treatment. Survivors need structured, long-term follow-up for years - recurrence surveillance, side-effect monitoring, treatment adherence checks - because early recurrence detection is one of the strongest predictors of survival. In practice, this tracking is manual: oncologists managing hundreds of patients rely on memory, spreadsheets, or calendar reminders to know who is due for a scan or check-in. Follow-ups slip through the cracks silently - there is no alert when a patient simply does not come back. When they do return, months later, doctors must reconstruct a complex treatment history from scattered notes before they can make a safe decision. This affects cancer patients, whose survival odds depend on timely surveillance, and oncologists, who are already stretched thin by India's severe oncologist-to-patient ratio. The gap is not clinical knowledge - it is that follow-up tracking has no system behind it.
+
+[145 words / 953 characters]
+
+================================================================
+FIELD: Your solution, and its name
+(max 150 words / 1200 characters)
+================================================================
+
+OncoFollow analyses each cancer patient's treatment record to determine when their next follow-up is due, based on cancer type and treatment stage, and flags anyone who is overdue. It ranks patients by urgency - a post-treatment patient six months overdue for a recurrence scan is surfaced before a routine annual check-in - so oncologists act on risk, not whoever happens to call the clinic. When a follow-up is due, OncoFollow automatically sends the patient a personalised reminder referencing their own case, instead of a generic notification. Every reminder is generated from a short, structured note the doctor leaves after each visit - a fast way to recall a patient's status before a follow-up call, not a full clinical record. The system enforces who can access which patient's data as policy, not convention, so sensitive oncology records stay restricted to the treating doctor by design.
+
+[144 words / 898 characters]
+
+SOLUTION NAME: OncoFollow
+
+================================================================
+FIELD: How you will build it
+(max 80 words / 600 characters)
+================================================================
+
+An AI agent (Strands Agents SDK) reads each patient's structured notes and drafts the follow-up message; Cedar policy-based authorization governs every action it takes, permitting only "read notes" and "send a reminder" - nothing else. Patient, note, and follow-up records live in a NoSQL store (DynamoDB-style); OpenSearch indexes notes for fast retrieval. A scheduling layer (Step Functions-style) tracks due dates and triggers outreach via SMS/WhatsApp. Backend in Python.
+
+[68 words / 475 characters]
+
+================================================================
+FIELD: Existing product/technology vs. new hackathon build
+(max 150 words / 1200 characters)
+================================================================
+
+We already have a working prototype - built in an earlier hackathon - that manages patient records, doctor notes, and Cedar-guarded automated follow-up reminders through an AI agent (Strands Agents SDK). It handles general consultation follow-ups but has no sense of clinical urgency: every follow-up is treated the same. For this hackathon, we are extending it specifically for oncology: adding logic that determines follow-up windows per cancer type and treatment stage, a risk-based prioritisation layer that ranks overdue patients by how much delay matters clinically (not just how overdue they are), and outreach messages that adapt their tone and content to the patient's specific treatment stage - a newly diagnosed patient and a five-year survivor should never receive the same reminder.
+
+[121 words / 795 characters]
